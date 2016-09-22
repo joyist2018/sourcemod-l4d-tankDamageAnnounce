@@ -110,7 +110,7 @@ void CalculateTankHealth()
 	else
 		g_fMaxTankHealth = 6000.0;
 		
-	PrintToChatAll("CalculateTankHealth - gamemode: %s difficulty: %s tankhealth: %f", g_sGameMode, g_sGameDifficulty, g_fMaxTankHealth);
+	// PrintToChatAll("CalculateTankHealth - gamemode: %s difficulty: %s tankhealth: %f", g_sGameMode, g_sGameDifficulty, g_fMaxTankHealth);
 }
      
 public void Event_PlayerHurt(Handle event, const char[] name, bool dontBroadcast)
@@ -134,15 +134,11 @@ public void Event_PlayerHurt(Handle event, const char[] name, bool dontBroadcast
 									) return;
 
 	if (StrEqual(WeaponUsed, "inferno", false)) // Damage is fire-type
-	{
 		g_iFireDamage += GetEventInt(event, "dmg_health");
-	}
 	else
-	{
 		g_iDamage[attacker] += GetEventInt(event, "dmg_health");
-		g_iLastTankHealth = GetEventInt(event, "health");
-	}
-	
+
+	g_iLastTankHealth = GetEventInt(event, "health");
 }
      
 public void Event_PlayerKilled(Handle event, const char[] name, bool dontBroadcast)
