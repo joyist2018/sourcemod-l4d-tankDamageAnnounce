@@ -5,9 +5,9 @@
 
 public Plugin myinfo = {
         name = "Tank Damage Announce L4D2",
-        author = "Griffin and Blade",
-        description = "Announce damage dealt to tanks by survivors",
-        version = "0.6.5d"
+        author = "Griffin, Blade and RB",
+        description = "Announce damage dealt (except fire damage) to tanks by survivors",
+        version = "0.6.6d"
 };
 
 const           TEAM_SURVIVOR               = 2;
@@ -21,7 +21,6 @@ int				g_iTankClient               = 0;                // Which client is curren
 int				g_iLastTankHealth           = 0;                // Used to award the killing blow the exact right amount of damage
 int				g_iSurvivorLimit			= 4;                // For survivor array in damage print
 int				g_iDamage[MAXPLAYERS + 1];
-int				g_iFireDamage;
 float			g_fMaxTankHealth            = 6000.0;
 Handle			g_hCvarEnabled              = null;
 Handle			g_hCvarTankHealth           = null;
@@ -117,9 +116,6 @@ public void Event_PlayerHurt(Handle event, const char[] name, bool dontBroadcast
 {
 	if (!g_bIsTankInPlay) return; // No tank in play; no damage to record
  
-  	char WeaponUsed[32];
-	GetEventString(event, "weapon", WeaponUsed, 32);
- 
 	int victim = GetClientOfUserId(GetEventInt(event, "userid"));
 	if (victim != GetTankClient() ||        // Victim isn't tank; no damage to record
 			IsTankDying()                                   // Something buggy happens when tank is dying with regards to damage
@@ -133,10 +129,9 @@ public void Event_PlayerHurt(Handle event, const char[] name, bool dontBroadcast
 			GetClientTeam(attacker) != TEAM_SURVIVOR
 									) return;
 
-	if (StrEqual(WeaponUsed, "inferno", false)) // Damage is fire-type
-		g_iFireDamage += GetEventInt(event, "dmg_health");
-	else
-		g_iDamage[attacker] += GetEventInt(event, "dmg_health");
+	int dmgType = GetEventInt(event, "type");
+	if (dmgType == 8 || dmgType == 2056 || dmgType == 268435464) return;
+	else g_iDamage[attacker] += GetEventInt(event, "dmg_health");
 
 	g_iLastTankHealth = GetEventInt(event, "health");
 }
@@ -147,13 +142,22 @@ public void Event_PlayerKilled(Handle event, const char[] name, bool dontBroadca
  
 	int victim = GetClientOfUserId(GetEventInt(event, "userid"));
 	if (victim != g_iTankClient) return;
- 
-	// Award the killing blow's damage to the attacker; we don't award
-	// damage from player_hurt after the tank has died/is dying
-	// If we don't do it this way, we get wonky/inaccurate damage values
+	
+	/*
+	Do not reward killing blow damage to a survivor when tank has been burned because for example:
+		In coop a tank with say 8000 health gets burned and dies after the maximum 'tank_burn_duration' of say 30 seconds
+		during this time the tank only took 500 actual burn damage. so whoever is going to do the damage blow with say 90 damage
+		will instead of receiving 90 damage receive 7500 damage
+		
+	Award the killing blow's damage to the attacker; we don't award
+	damage from player_hurt after the tank has died/is dying
+	If we don't do it this way, we get wonky/inaccurate damage values
+	*/
 	int attacker = GetClientOfUserId(GetEventInt(event, "attacker"));
-	if (attacker && IsClientInGame(attacker)) g_iDamage[attacker] += g_iLastTankHealth;
- 
+	int dmgType = GetEventInt(event, "type");
+	if (dmgType == 8 || dmgType == 2056 || dmgType == 268435464) return; // tank died because tank_burn_duration ended or fire damage
+	else if (attacker && IsClientInGame(attacker)) g_iDamage[attacker] += g_iLastTankHealth; // tank died by survivor damage
+	
 	// Damage announce could probably happen right here...
 	CreateTimer(0.1, Timer_CheckTank, victim); // Use a delayed timer due to bugs where the tank passes to another player
 }
@@ -256,7 +260,7 @@ void PrintTankDamage()
 			percent_total += percent_damage;
 	}
 	SortCustom1D(survivor_clients, g_iSurvivorLimit, SortByDamageDesc);
- 
+	
 	int percent_adjustment;
 	// Percents add up to less than 100% AND > 99.5% damage was dealt to tank
 	if ((percent_total < 100 &&
@@ -287,17 +291,15 @@ void PrintTankDamage()
 							percent_adjustment = 0;
 					}
 			}
-			PrintToChatAll("\x05%4d\x01 [\x04%d%%\x01]: \x03%N\x01", damage, percent_damage, client);
+			// PrintToChatAll("\x05%4d\x01 [\x04%d%%\x01]: \x03%N\x01", damage, percent_damage, client);
+			PrintToChatAll("\x03%N\x01 - \x05%d\x01 [\x04%d%%\x01]", client, damage, percent_damage);
 	}
-	if (g_iFireDamage)
-		PrintToChatAll("\x05%4d\x01 [\x04%d%%\x01] fire damage", g_iFireDamage, GetDamageAsPercent(g_iFireDamage) + 1);
 }
      
 void ClearTankDamage()
 {
 	g_iLastTankHealth = 0;
 	for (int i = 1; i <= MaxClients; i++) { g_iDamage[i] = 0; }
-	g_iFireDamage = 0;
 	g_bAnnounceTankDamage = false;
 }
      
